@@ -19,7 +19,7 @@
  #--node-type 工作节点类型 默认为m5.large
  #--nodes 工作节点数量 默认为2
  
-eksctl create cluster --name=${CLUSTER_NAME} --node-type t3.medium --managed --alb-ingress-access --region=${AWS_REGION}
+eksctl create cluster --name=${CLUSTER_NAME} --version=1.23 --node-type t3.medium --managed --alb-ingress-access --region=${AWS_REGION}
 
  ```
 
@@ -59,6 +59,8 @@ eksctl create cluster --name=${CLUSTER_NAME} --node-type t3.medium --managed --a
 
   集群创建完毕后,查看EKS集群工作节点
   ```bash
+  aws eks update-kubeconfig --region cn-northwest-1 --name eksworkshop
+  kubectl config use-context 
    kubectl get node
   ```
 

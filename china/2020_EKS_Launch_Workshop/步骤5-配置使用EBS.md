@@ -11,6 +11,8 @@
 ```bash
 
 #中国区请使用aws-ebs-csi-driver/ebs-csi-iam-policy.json
+cd ~/eks-workshop-greater-china/china/2020_EKS_Launch_Workshop/resource
+
 aws iam create-policy \
     --policy-name Amazon_EBS_CSI_Driver \
     --policy-document file://./aws-ebs-csi-driver/ebs-csi-iam-policy.json \

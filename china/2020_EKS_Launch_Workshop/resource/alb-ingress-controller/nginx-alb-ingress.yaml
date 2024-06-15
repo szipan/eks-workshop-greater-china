@@ -35,23 +35,26 @@ spec:
     port: 80
     targetPort: 80
 ---
-apiVersion: extensions/v1beta1
+apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: "alb-ingress"
   namespace: "default"
   annotations:
-    kubernetes.io/ingress.class: alb
     alb.ingress.kubernetes.io/scheme: internet-facing
     #alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/target-type: instance
   labels:
     app: nginx
 spec:
+  ingressClassName: alb
   rules:
     - http:
         paths:
           - path: /*
+            pathType: Prefix
             backend:
-              serviceName: "service-nginx-clusterip"
-              servicePort: 80
+              service:
+                name: "service-nginx-clusterip"
+                port:
+                  number: 80

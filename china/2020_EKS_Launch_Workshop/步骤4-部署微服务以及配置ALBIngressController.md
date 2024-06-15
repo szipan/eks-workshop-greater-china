@@ -106,12 +106,12 @@ eksctl utils associate-iam-oidc-provider --cluster=${CLUSTER_NAME} --approve --r
  * 请注意官方的policy里面包含了WAF等服务，中国区没有所以需要手动删除,修改好的已经放在resource/alb-ingress-controller目录下
 
 ```bash
-cd china/2020_EKS_Launch_Workshop
-aws iam create-policy --policy-name ALBIngressControllerIAMPolicy \
-  --policy-document file://./alb-ingress-controller/ingress-iam-policy.json --region ${AWS_REGION}
+cd ~/eks-workshop-greater-china/china/2020_EKS_Launch_Workshop
+aws iam create-policy --policy-name AWSLoadBalancerControllerIAMPolicy \
+  --policy-document file://./resource/alb-ingress-controller/iam_policy.json --region ${AWS_REGION}
 
 # 记录返回的Plociy ARN
-POLICY_NAME=$(aws iam list-policies --query 'Policies[?PolicyName==`ALBIngressControllerIAMPolicy`].Arn' --output text --region ${AWS_REGION})
+POLICY_NAME=$(aws iam list-policies --query 'Policies[?PolicyName==`AWSLoadBalancerControllerIAMPolicy`].Arn' --output text --region ${AWS_REGION})
 
 ```
 
@@ -121,7 +121,7 @@ POLICY_NAME=$(aws iam list-policies --query 'Policies[?PolicyName==`ALBIngressCo
 eksctl create iamserviceaccount \
        --cluster=${CLUSTER_NAME} \
        --namespace=kube-system \
-       --name=alb-ingress-controller \
+       --name=aws-load-balancer-controller \
        --attach-policy-arn=${POLICY_NAME} \
        --override-existing-serviceaccounts \
        --approve
@@ -139,103 +139,43 @@ eksctl create iamserviceaccount \
 
 
 
-4.3 部署 ALB Ingress Controller
+4.3 部署 Amazon Load Balancer Controller
+首先参照步骤9，安装helm
 
- 相关文件已经resource/alb-ingress-controller目录下，并且修改好，下面步骤为你全新Step-by-Step操作
+ helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
+  -n kube-system \
+  --set clusterName=${CLUSTER_NAME} \
+  --set serviceAccount.create=false \
+  --set serviceAccount.name=aws-load-balancer-controller \
+  --set enableShield=false \
+  --set enableWaf=false \
+  --set enableWafv2=false
 
- >4.3.1 创建 ALB Ingress Controller 所需要的RBAC
+验证Amazon Load Balancer Controller安装成功
+kubectl get deployment -n kube-system aws-load-balancer-controller
 
- ```bash
- kubectl apply -f alb-ingress-controller/rbac-role.yaml
- 
- ```
-
->4.2.2 创建 ALB Ingress Controller 配置文件
-
- 修改alb-ingress-controller.yaml 以下配置，参考示例 resource/alb-ingress-controller/alb-ingress-controller.yaml
-(eksctl 自动创建的 vpc 默认为 eksctl-<集群名字>-cluster/VPC)
-
-**特别注意,如果你在中国区使用最新版本1.1.7会有WAF,WAFV2 issue**
-
-[https://github.com/aws-samples/eks-workshop-greater-china/issues/31](https://github.com/aws-samples/eks-workshop-greater-china/issues/31)
-
-需要添加--feature-gates=waf=false,wafv2=false 参数
-
-  ```bash
-  #修改以下内容
-  - --cluster-name=<步骤2 创建的集群名字>
-  - --aws-vpc-id=<eksctl 创建的vpc-id>   
-  - --aws-region=cn-northwest-1
-  #1.1.7 waf,wafv2修复方式
-  # 如果你使用alb-ingress-controller 1.1.7 需要禁用waf,wafv2
-  - --feature-gates=waf=false,wafv2=false
-  
-  #添加环境变量，作为 https://github.com/kubernetes-sigs/aws-alb-ingress-controller/issues/1180 的workaround
-  env:
-            - name: AWS_REGION
-              value: cn-northwest-1
-              
- 
-    
-  #使用修改好的yaml文件部署ALB Ingress Controller
- kubectl apply -f alb-ingress-controller/alb-ingress-controller.yaml
-
- 
- #确认ALB Ingress Controller是否工作
- kubectl logs -n kube-system $(kubectl get po -n kube-system | egrep -o alb-ingress[a-zA-Z0-9-]+)
 
  #参考输出
--------------------------------------------------------------------------------
-  AWS ALB Ingress controller
-  Release:    v1.1.5
-  Build:      git-2560c813
-  Repository: https://github.com/kubernetes-sigs/aws-alb-ingress-controller.git
--------------------------------------------------------------------------------
+NAME                           READY   UP-TO-DATE   AVAILABLE   AGE
+aws-load-balancer-controller   2/2     2            2           84s
 
   ```
 
-
- 4.4 使用ALB Ingress   
->4.4.1 为nginx service创建ingress
-
-```bash
-cd resource/alb-ingress-controller
-kubectl apply -f nginx-alb-ingress.yaml
-```
-
->4.4.2 验证
-
-```bash
-ALB=$(kubectl get ingress -o json | jq -r '.items[0].status.loadBalancer.ingress[].hostname')
-curl -m3 -v $ALB
-
-# 如果遇到问题，请查看日志
-kubectl logs -n kube-system $(kubectl get po -n kube-system | egrep -o alb-ingress[a-zA-Z0-9-]+)
-```
-
-> 4.4.3 清理
-```bash
-kubectl delete -f nginx-alb-ingress.yaml
-```
-
-4.5 使用ALB Ingress，部署2048 game (可选）
+4.4 使用ALB Ingress，部署2048 game (可选）
 
 注意，默认已经使用2.4章节自动修改image mirror的webhook，否则请修改Image地址为国内可以访问的。
 
 ```bash
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/aws-alb-ingress-controller/v1.0.0/docs/examples/2048/2048-namespace.yaml
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/aws-alb-ingress-controller/v1.0.0/docs/examples/2048/2048-deployment.yaml
-kubectl get pods -n 2048-game
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/aws-alb-ingress-controller/v1.0.0/docs/examples/2048/2048-service.yaml
-kubectl get service service-2048 -o wide -n 2048-game
-kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/aws-alb-ingress-controller/v1.0.0/docs/examples/2048/2048-ingress.yaml
+curl -s https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.3.1/docs/examples/2048/2048_full_latest.yaml \
+    | sed 's=alb.ingress.kubernetes.io/target-type: ip=alb.ingress.kubernetes.io/target-type: instance=g' \
+    | kubectl apply -f -
 
 # 获取访问地址，在浏览器中访问2048游戏
-kubectl get ingress/2048-ingress -n 2048-game
+kubectl get ingress/ingress-2048 -n game-2048
 
-kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/aws-alb-ingress-controller/v1.0.0/docs/examples/2048/2048-deployment.yaml
-kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/aws-alb-ingress-controller/v1.0.0/docs/examples/2048/2048-service.yaml
-kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/aws-alb-ingress-controller/v1.0.0/docs/examples/2048/2048-ingress.yaml
-kubectl delete -f https://raw.githubusercontent.com/kubernetes-sigs/aws-alb-ingress-controller/v1.0.0/docs/examples/2048/2048-namespace.yaml
+#删除游戏
+curl -s https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.3.1/docs/examples/2048/2048_full_latest.yaml \
+    | sed 's=alb.ingress.kubernetes.io/target-type: ip=alb.ingress.kubernetes.io/target-type: instance=g' \
+    | kubectl delete -f -
 ```
 
